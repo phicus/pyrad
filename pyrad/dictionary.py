@@ -78,7 +78,7 @@ __docformat__ = 'epytext en'
 
 DATATYPES = frozenset(['string', 'ipaddr', 'integer', 'date', 'octets',
                        'abinary', 'ipv6addr', 'ipv6prefix', 'short', 'byte',
-                       'signed', 'ifid', 'ether', 'vsa', 'tlv'])
+                       'signed', 'ifid', 'ether', 'vsa', 'tlv', 'ipv4prefix'])
 
 
 class ParseError(Exception):
