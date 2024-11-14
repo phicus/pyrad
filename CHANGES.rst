@@ -1,10 +1,73 @@
 Changelog
 =========
 
+* Drop support of Python 2.x
+
+* Add salt decryption of encrypted attributes
+
+* Fix for UTF-8
+
+* Fix fix usage of socket.getaddrinfo
+
+* Fix #197 KeyError when handling CoA packet for 0.0.0.0
+
+* Fix create CoA packet in client_async
+
+* Fix #152 and add corresponding unittests
+
+* Fixed unittests
+
+2.4 - Nov 23, 2020
+-------------------
+
+* Support poetry for for building this project
+
+* Use secrets.SysRandom instead of random.SystemRandom if possible
+
+* `.get` on Packets has an optional default parameter (to mimic dict.get())
+
+* Fix: digestmod is not optional in python3.8 anymore
+
+* Fix: authenticator was refreshed before the packet was generated
+
+* Fix bug causing Message-Authenticator verification to fail if
+  multiple instances of an attribute do not appear sequentially in
+  the attributes list
+
+* Fixed #140 VerifyReply broken when multiple instances of same attribute are
+  not adjacent on reply
+
+* Fixed #135 Missing send_packet for async Client
+
+* Fixed #126 python3 support for SaltCrypt
+  (was previously broken)
+
+2.3 - Feb 6, 2020
+------------------
+
+* Fixed #124 remove reuse_address=True from async server/client
+
+* Fixed #121 Unknown attribute key error
+
+2.2 - Oct 19, 2019
+------------------
+
+* Add message authenticator support (attribute 80)
+
+* Add support for multiple values of the same attribute (#95)
+
+* Add experimental async client and server implementation for python >=3.5.
+
+* Add IPv6 bind support for client and server.
+
+* Add support of tlv and integer64 attributes.
+
+* Multiple minor enhancements and fixes.
+
 2.1 - Feb 2, 2017
 -----------------
 
-* Add CoA support (client and server)
+* Add CoA support (client and server).
 
 * Add tagged attribute support (send only).
 

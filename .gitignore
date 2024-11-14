@@ -1,6 +1,18 @@
+.DS_Store
+
 build/
 dist/
 docs/.build/
 pyrad.egg-info/
 *.pyc
 *__pycache__
+*.egg/
+
+.coverage
+coverage.lcov
+
+# virtual environments
+.env
+env
+.venv
+venv

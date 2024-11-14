@@ -4,13 +4,17 @@
 
 __docformat__ = "epytext en"
 
+import hashlib
 import select
 import socket
 import time
-import six
+import struct
 from pyrad import host
 from pyrad import packet
 
+EAP_CODE_REQUEST = 1
+EAP_CODE_RESPONSE = 2
+EAP_TYPE_IDENTITY = 1
 
 class Timeout(Exception):
     """Simple exception class which is raised when a timeout occurs
@@ -26,10 +30,10 @@ class Client(host.Host):
     :ivar retries: number of times to retry sending a RADIUS request
     :type retries: integer
     :ivar timeout: number of seconds to wait for an answer
-    :type timeout: integer
+    :type timeout: float
     """
     def __init__(self, server, authport=1812, acctport=1813,
-            coaport=3799, secret=six.b(''), dict=None):
+            coaport=3799, secret=b'', dict=None, retries=3, timeout=5):
 
         """Constructor.
 
@@ -51,8 +55,9 @@ class Client(host.Host):
         self.server = server
         self.secret = secret
         self._socket = None
-        self.retries = 3
-        self.timeout = 5
+        self.retries = retries
+        self.timeout = timeout
+        self._poll = select.poll()
 
     def bind(self, addr):
         """Bind socket to an address.
@@ -67,14 +72,20 @@ class Client(host.Host):
         self._socket.bind(addr)
 
     def _SocketOpen(self):
+        try:
+            family = socket.getaddrinfo(self.server, 80)[0][0]
+        except:
+            family = socket.AF_INET
         if not self._socket:
-            self._socket = socket.socket(socket.AF_INET,
+            self._socket = socket.socket(family,
                                        socket.SOCK_DGRAM)
             self._socket.setsockopt(socket.SOL_SOCKET,
                                     socket.SO_REUSEADDR, 1)
+            self._poll.register(self._socket, select.POLLIN)
 
     def _CloseSocket(self):
         if self._socket:
+            self._poll.unregister(self._socket)
             self._socket.close()
             self._socket = None
 
@@ -86,7 +97,7 @@ class Client(host.Host):
         dictionary and secret used for the client.
 
         :return: a new empty packet instance
-        :rtype:  pyrad.packet.Packet
+        :rtype:  pyrad.packet.AuthPacket
         """
         return host.Host.CreateAuthPacket(self, secret=self.secret, **args)
 
@@ -101,7 +112,7 @@ class Client(host.Host):
         :rtype:  pyrad.packet.Packet
         """
         return host.Host.CreateAcctPacket(self, secret=self.secret, **args)
-        
+
     def CreateCoAPacket(self, **args):
         """Create a new RADIUS packet.
         This utility function creates a new RADIUS packet which can
@@ -134,16 +145,16 @@ class Client(host.Host):
                             pkt["Acct-Delay-Time"][0] + self.timeout
                 else:
                     pkt["Acct-Delay-Time"] = self.timeout
-            self._socket.sendto(pkt.RequestPacket(), (self.server, port))
 
             now = time.time()
             waitto = now + self.timeout
 
-            while now < waitto:
-                ready = select.select([self._socket], [], [],
-                                    (waitto - now))
+            self._socket.sendto(pkt.RequestPacket(), (self.server, port))
 
-                if ready[0]:
+            while now < waitto:
+                ready = self._poll.poll((waitto - now) * 1000)
+
+                if ready:
                     rawreply = self._socket.recv(4096)
                 else:
                     now = time.time()
@@ -170,7 +181,39 @@ class Client(host.Host):
         :raise Timeout: RADIUS server does not reply
         """
         if isinstance(pkt, packet.AuthPacket):
-            return self._SendPacket(pkt, self.authport)
+            if pkt.auth_type == 'eap-md5':
+                # Creating EAP-Identity
+                password = pkt[2][0] if 2 in pkt else pkt[1][0]
+                pkt[79] = [struct.pack('!BBHB%ds' % len(password),
+                                       EAP_CODE_RESPONSE,
+                                       packet.CurrentID,
+                                       len(password) + 5,
+                                       EAP_TYPE_IDENTITY,
+                                       password)]
+            reply = self._SendPacket(pkt, self.authport)
+            if (
+                reply
+                and reply.code == packet.AccessChallenge
+                and pkt.auth_type == 'eap-md5'
+            ):
+                # Got an Access-Challenge
+                eap_code, eap_id, eap_size, eap_type, eap_md5 = struct.unpack(
+                    '!BBHB%ds' % (len(reply[79][0]) - 5), reply[79][0]
+                )
+                # Sending back an EAP-Type-MD5-Challenge
+                # Thank god for http://www.secdev.org/python/eapy.py
+                client_pw = pkt[2][0] if 2 in pkt else pkt[1][0]
+                md5_challenge = hashlib.md5(
+                    struct.pack('!B', eap_id) + client_pw + eap_md5[1:]
+                ).digest()
+                pkt[79] = [
+                    struct.pack('!BBHBB', 2, eap_id, len(md5_challenge) + 6,
+                                4, len(md5_challenge)) + md5_challenge
+                ]
+                # Copy over Challenge-State
+                pkt[24] = reply[24]
+                reply = self._SendPacket(pkt, self.authport)
+            return reply
         elif isinstance(pkt, packet.CoAPacket):
             return self._SendPacket(pkt, self.coaport)
         else:
