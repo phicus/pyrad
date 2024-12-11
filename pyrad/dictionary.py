@@ -240,7 +240,8 @@ class Dictionary(object):
             code = int(codes[0])
             parent_code = None
         else:
-            raise ParseError('nested tlvs are not supported')
+            # raise ParseError('nested tlvs are not supported')
+            return # ignore
 
         datatype = datatype.split("[")[0]
 
